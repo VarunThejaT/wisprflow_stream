@@ -128,7 +128,21 @@
     }
 
     .message.copied {
-      background: #1a3a1a;
+      animation: copied-flash 1s ease-out;
+    }
+
+    @keyframes copied-flash {
+      0%   { background: #2a5a2a; border-color: #22c55e; }
+      100% { background: #1a1a2a; border-color: #2a2a3a; }
+    }
+
+    .status-dot.reconnecting {
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%      { opacity: 0.3; }
     }
 
     .message-text {
@@ -215,6 +229,11 @@
     <span class="title">WisprFlow Stream</span>
     <div class="controls">
       <label class="toggle-label">
+        <span>Sound</span>
+        <input type="checkbox" id="sound-toggle">
+        <span class="toggle-switch"></span>
+      </label>
+      <label class="toggle-label">
         <span>Auto-copy</span>
         <input type="checkbox" id="auto-copy">
         <span class="toggle-switch"></span>
@@ -243,21 +262,44 @@
     const statusDot = document.getElementById("status-dot");
     const statusText = document.getElementById("status-text");
     const autoCopyToggle = document.getElementById("auto-copy");
+    const soundToggle = document.getElementById("sound-toggle");
 
     let ws;
     let reconnectDelay = 1000;
+    let audioCtx;
 
-    // Persist auto-copy preference
+    // Persist preferences
     autoCopyToggle.checked = localStorage.getItem("autoCopy") === "true";
     autoCopyToggle.addEventListener("change", () => {
       localStorage.setItem("autoCopy", autoCopyToggle.checked);
     });
+
+    soundToggle.checked = localStorage.getItem("sound") !== "false"; // default ON
+    soundToggle.addEventListener("change", () => {
+      localStorage.setItem("sound", soundToggle.checked);
+    });
+
+    function playNotificationSound() {
+      if (!soundToggle.checked) return;
+      if (!audioCtx) audioCtx = new AudioContext();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.frequency.value = 880;
+      osc.type = "sine";
+      gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+      osc.start(audioCtx.currentTime);
+      osc.stop(audioCtx.currentTime + 0.15);
+    }
 
     function connect() {
       const protocol = location.protocol === "https:" ? "wss:" : "ws:";
       ws = new WebSocket(`${protocol}//${location.host}`);
 
       ws.addEventListener("open", () => {
+        statusDot.classList.remove("reconnecting");
         statusDot.classList.add("connected");
         statusText.textContent = "Connected";
         sendBtn.disabled = false;
@@ -266,7 +308,8 @@
 
       ws.addEventListener("close", () => {
         statusDot.classList.remove("connected");
-        statusText.textContent = "Disconnected";
+        statusDot.classList.add("reconnecting");
+        statusText.textContent = `Reconnecting in ${reconnectDelay / 1000}s...`;
         sendBtn.disabled = true;
         setTimeout(connect, reconnectDelay);
         reconnectDelay = Math.min(reconnectDelay * 2, 30000);
@@ -280,6 +323,7 @@
         try {
           const data = JSON.parse(event.data);
           addMessage(data.text, "received");
+          playNotificationSound();
 
           if (autoCopyToggle.checked) {
             copyToClipboard(data.text);
