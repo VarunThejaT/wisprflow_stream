@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WisprFlow Stream</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f0f0f;
+      color: #e0e0e0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      border-bottom: 1px solid #2a2a2a;
+    }
+
+    .title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: #888;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #ef4444;
+      transition: background 0.3s;
+    }
+
+    .status-dot.connected { background: #22c55e; }
+
+    .toggle-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: #888;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .toggle-label input { display: none; }
+
+    .toggle-switch {
+      width: 36px;
+      height: 20px;
+      background: #333;
+      border-radius: 10px;
+      position: relative;
+      transition: background 0.2s;
+    }
+
+    .toggle-switch::after {
+      content: "";
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 16px;
+      height: 16px;
+      background: #888;
+      border-radius: 50%;
+      transition: transform 0.2s, background 0.2s;
+    }
+
+    .toggle-label input:checked + .toggle-switch {
+      background: #22c55e33;
+    }
+
+    .toggle-label input:checked + .toggle-switch::after {
+      transform: translateX(16px);
+      background: #22c55e;
+    }
+
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .message {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      max-width: 80%;
+      transition: background 0.3s;
+    }
+
+    .message.sent {
+      background: #1a2a1a;
+      align-self: flex-end;
+      border: 1px solid #2a3a2a;
+    }
+
+    .message.received {
+      background: #1a1a2a;
+      align-self: flex-start;
+      border: 1px solid #2a2a3a;
+    }
+
+    .message.copied {
+      background: #1a3a1a;
+    }
+
+    .message-text {
+      flex: 1;
+      font-size: 15px;
+      line-height: 1.4;
+      word-break: break-word;
+    }
+
+    .message-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .message-time {
+      font-size: 11px;
+      color: #555;
+    }
+
+    .copy-btn {
+      background: none;
+      border: 1px solid #333;
+      color: #888;
+      font-size: 12px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .copy-btn:hover { border-color: #555; color: #ccc; }
+    .copy-btn.copied-btn { border-color: #22c55e; color: #22c55e; }
+
+    .input-area {
+      display: flex;
+      gap: 10px;
+      padding: 16px 20px;
+      border-top: 1px solid #2a2a2a;
+    }
+
+    #input {
+      flex: 1;
+      padding: 10px 14px;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 8px;
+      color: #e0e0e0;
+      font-size: 15px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    #input:focus { border-color: #555; }
+
+    #send-btn {
+      padding: 10px 20px;
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    #send-btn:hover { background: #1d4ed8; }
+    #send-btn:disabled { background: #333; color: #555; cursor: not-allowed; }
+
+    .empty-state {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #444;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="title">WisprFlow Stream</span>
+    <div class="controls">
+      <label class="toggle-label">
+        <span>Auto-copy</span>
+        <input type="checkbox" id="auto-copy">
+        <span class="toggle-switch"></span>
+      </label>
+      <div class="status">
+        <span class="status-dot" id="status-dot"></span>
+        <span id="status-text">Disconnected</span>
+      </div>
+    </div>
+  </header>
+
+  <div id="messages">
+    <div class="empty-state" id="empty-state">No messages yet</div>
+  </div>
+
+  <div class="input-area">
+    <input type="text" id="input" placeholder="Type a message..." autocomplete="off">
+    <button id="send-btn" disabled>Send</button>
+  </div>
+
+  <script>
+    const messagesEl = document.getElementById("messages");
+    const emptyState = document.getElementById("empty-state");
+    const inputEl = document.getElementById("input");
+    const sendBtn = document.getElementById("send-btn");
+    const statusDot = document.getElementById("status-dot");
+    const statusText = document.getElementById("status-text");
+    const autoCopyToggle = document.getElementById("auto-copy");
+
+    let ws;
+    let reconnectDelay = 1000;
+
+    // Persist auto-copy preference
+    autoCopyToggle.checked = localStorage.getItem("autoCopy") === "true";
+    autoCopyToggle.addEventListener("change", () => {
+      localStorage.setItem("autoCopy", autoCopyToggle.checked);
+    });
+
+    function connect() {
+      const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+      ws = new WebSocket(`${protocol}//${location.host}`);
+
+      ws.addEventListener("open", () => {
+        statusDot.classList.add("connected");
+        statusText.textContent = "Connected";
+        sendBtn.disabled = false;
+        reconnectDelay = 1000;
+      });
+
+      ws.addEventListener("close", () => {
+        statusDot.classList.remove("connected");
+        statusText.textContent = "Disconnected";
+        sendBtn.disabled = true;
+        setTimeout(connect, reconnectDelay);
+        reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+      });
+
+      ws.addEventListener("error", () => {
+        ws.close();
+      });
+
+      ws.addEventListener("message", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          addMessage(data.text, "received");
+
+          if (autoCopyToggle.checked) {
+            copyToClipboard(data.text);
+          }
+        } catch (e) {
+          // Ignore malformed messages
+        }
+      });
+    }
+
+    function send() {
+      const text = inputEl.value.trim();
+      if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+      const message = { type: "message", text, ts: Date.now() };
+      ws.send(JSON.stringify(message));
+      addMessage(text, "sent");
+      inputEl.value = "";
+      inputEl.focus();
+    }
+
+    function addMessage(text, direction) {
+      emptyState.style.display = "none";
+
+      const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+      const msgEl = document.createElement("div");
+      msgEl.className = `message ${direction}`;
+      msgEl.innerHTML = `
+        <span class="message-text">${escapeHtml(text)}</span>
+        <div class="message-meta">
+          <span class="message-time">${time}</span>
+          <button class="copy-btn" onclick="copyFromButton(this, '${escapeAttr(text)}')">Copy</button>
+        </div>
+      `;
+      messagesEl.appendChild(msgEl);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+
+      return msgEl;
+    }
+
+    async function copyToClipboard(text) {
+      try {
+        await navigator.clipboard.writeText(text);
+        // Flash the last received message
+        const msgs = messagesEl.querySelectorAll(".message.received");
+        const last = msgs[msgs.length - 1];
+        if (last) {
+          last.classList.add("copied");
+          setTimeout(() => last.classList.remove("copied"), 1000);
+        }
+      } catch (err) {
+        console.warn("Clipboard write failed:", err);
+      }
+    }
+
+    function copyFromButton(btn, text) {
+      navigator.clipboard.writeText(text).then(() => {
+        btn.textContent = "Copied!";
+        btn.classList.add("copied-btn");
+        setTimeout(() => {
+          btn.textContent = "Copy";
+          btn.classList.remove("copied-btn");
+        }, 1500);
+      });
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement("div");
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    function escapeAttr(str) {
+      return str.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/"/g, "&quot;");
+    }
+
+    // Event listeners
+    inputEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") send();
+    });
+    sendBtn.addEventListener("click", send);
+
+    // Start
+    connect();
+    inputEl.focus();
+  </script>
+</body>
+</html>

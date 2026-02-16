@@ -1,0 +1,23 @@
+{
+  "name": "wisprflow_stream",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VarunThejaT/wisprflow_stream.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/VarunThejaT/wisprflow_stream/issues"
+  },
+  "homepage": "https://github.com/VarunThejaT/wisprflow_stream#readme",
+  "dependencies": {
+    "ws": "^8.19.0"
+  }
+}
