@@ -269,7 +269,7 @@
     let audioCtx;
 
     // Persist preferences
-    autoCopyToggle.checked = localStorage.getItem("autoCopy") === "true";
+    autoCopyToggle.checked = localStorage.getItem("autoCopy") !== "false";
     autoCopyToggle.addEventListener("change", () => {
       localStorage.setItem("autoCopy", autoCopyToggle.checked);
     });
