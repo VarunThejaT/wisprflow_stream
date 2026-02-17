@@ -18,6 +18,8 @@
   },
   "homepage": "https://github.com/VarunThejaT/wisprflow_stream#readme",
   "dependencies": {
+    "jsonwebtoken": "^9.0.3",
+    "jwks-rsa": "^3.2.2",
     "ws": "^8.19.0"
   }
 }

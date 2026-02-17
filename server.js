@@ -1,9 +1,42 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
+const url = require("url");
+const jwt = require("jsonwebtoken");
+const jwksRsa = require("jwks-rsa");
 const { WebSocketServer } = require("ws");
 
 const PORT = process.env.PORT || 3000;
+const SUPABASE_URL = process.env.SUPABASE_URL || "https://qufeotwtcvdpdqngysuj.supabase.co";
+
+const jwksClient = jwksRsa({
+  jwksUri: `${SUPABASE_URL}/auth/v1/.well-known/jwks.json`,
+  cache: true,
+  cacheMaxAge: 600000, // 10 minutes
+});
+
+function getSigningKey(header) {
+  return new Promise((resolve, reject) => {
+    jwksClient.getSigningKey(header.kid, (err, key) => {
+      if (err) return reject(err);
+      resolve(key.getPublicKey());
+    });
+  });
+}
+
+function verifyToken(token) {
+  return new Promise((resolve, reject) => {
+    const decoded = jwt.decode(token, { complete: true });
+    if (!decoded) return reject(new Error("Could not decode token"));
+
+    getSigningKey(decoded.header)
+      .then((publicKey) => {
+        const payload = jwt.verify(token, publicKey, { algorithms: ["ES256"] });
+        resolve(payload);
+      })
+      .catch(reject);
+  });
+}
 
 const MIME_TYPES = {
   ".html": "text/html",
@@ -12,10 +45,11 @@ const MIME_TYPES = {
 };
 
 const server = http.createServer((req, res) => {
+  const reqPath = url.parse(req.url).pathname;
   const filePath = path.join(
     __dirname,
     "public",
-    req.url === "/" ? "index.html" : req.url
+    reqPath === "/" ? "index.html" : reqPath
   );
   const ext = path.extname(filePath);
   const contentType = MIME_TYPES[ext] || "application/octet-stream";
@@ -33,21 +67,40 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocketServer({ server });
 
-wss.on("connection", (ws) => {
-  console.log(`Client connected (${wss.clients.size} total)`);
+wss.on("connection", async (ws, req) => {
+  const params = new URLSearchParams(url.parse(req.url).query);
+  const token = params.get("token");
+
+  if (!token) {
+    ws.close(4001, "Missing token");
+    return;
+  }
+
+  let payload;
+  try {
+    payload = await verifyToken(token);
+  } catch (err) {
+    console.error("JWT verification failed:", err.message);
+    ws.close(4003, "Invalid token");
+    return;
+  }
+
+  const userId = payload.sub;
+  ws.userId = userId;
+
+  console.log(`Client connected: user=${userId} (${wss.clients.size} total)`);
 
   ws.on("message", (data) => {
     const message = data.toString();
-    // Broadcast to all other connected clients
     for (const client of wss.clients) {
-      if (client !== ws && client.readyState === 1) {
+      if (client !== ws && client.readyState === 1 && client.userId === userId) {
         client.send(message);
       }
     }
   });
 
   ws.on("close", () => {
-    console.log(`Client disconnected (${wss.clients.size} total)`);
+    console.log(`Client disconnected: user=${userId} (${wss.clients.size} total)`);
   });
 });
 

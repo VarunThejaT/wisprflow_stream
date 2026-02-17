@@ -214,6 +214,19 @@
     #send-btn:hover { background: #1d4ed8; }
     #send-btn:disabled { background: #333; color: #555; cursor: not-allowed; }
 
+    .logout-btn {
+      background: none;
+      border: 1px solid #333;
+      color: #888;
+      font-size: 13px;
+      padding: 4px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .logout-btn:hover { border-color: #ef4444; color: #ef4444; }
+
     .empty-state {
       flex: 1;
       display: flex;
@@ -242,6 +255,7 @@
         <span class="status-dot" id="status-dot"></span>
         <span id="status-text">Disconnected</span>
       </div>
+      <button id="logout-btn" class="logout-btn">Logout</button>
     </div>
   </header>
 
@@ -254,7 +268,37 @@
     <button id="send-btn" disabled>Send</button>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script>
+    const SUPABASE_URL = "https://qufeotwtcvdpdqngysuj.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF1ZmVvdHd0Y3ZkcGRxbmd5c3VqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyNTgxODQsImV4cCI6MjA4NjgzNDE4NH0.GuvNQcn0RZ9RLCRyWHLFAoQDrcqASKDjs1fSkB5GIow";
+
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    let accessToken = null;
+
+    // Auth gate: redirect to login if not authenticated
+    async function initAuth() {
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) {
+        window.location.href = "/login.html";
+        return;
+      }
+      accessToken = session.access_token;
+
+      // Refresh token when it changes
+      sb.auth.onAuthStateChange((event, session) => {
+        if (!session) {
+          window.location.href = "/login.html";
+          return;
+        }
+        accessToken = session.access_token;
+      });
+
+      connect();
+      inputEl.focus();
+    }
+
     const messagesEl = document.getElementById("messages");
     const emptyState = document.getElementById("empty-state");
     const inputEl = document.getElementById("input");
@@ -263,10 +307,17 @@
     const statusText = document.getElementById("status-text");
     const autoCopyToggle = document.getElementById("auto-copy");
     const soundToggle = document.getElementById("sound-toggle");
+    const logoutBtn = document.getElementById("logout-btn");
 
     let ws;
     let reconnectDelay = 1000;
     let audioCtx;
+
+    // Logout
+    logoutBtn.addEventListener("click", async () => {
+      await sb.auth.signOut();
+      window.location.href = "/login.html";
+    });
 
     // Persist preferences
     autoCopyToggle.checked = localStorage.getItem("autoCopy") !== "false";
@@ -296,7 +347,7 @@
 
     function connect() {
       const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-      ws = new WebSocket(`${protocol}//${location.host}`);
+      ws = new WebSocket(`${protocol}//${location.host}?token=${encodeURIComponent(accessToken)}`);
 
       ws.addEventListener("open", () => {
         statusDot.classList.remove("reconnecting");
@@ -407,9 +458,8 @@
     });
     sendBtn.addEventListener("click", send);
 
-    // Start
-    connect();
-    inputEl.focus();
+    // Start — wait for auth before connecting
+    initAuth();
   </script>
 </body>
 </html>
